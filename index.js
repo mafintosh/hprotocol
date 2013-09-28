@@ -63,10 +63,13 @@ var writegen = function(node) {
 		args = '['+args.join(', ')+']'
 	}
 
-	src += '\tthis._writeLine('+args+');\n';
-
-	if (node.incoming) src += '\tthis._incoming.push('+(node.incoming.array ? 'cb' : 'first(cb)')+');\n';
-	else src += '\tif (cb) this.flush(cb);\n';
+	if (node.incoming) {
+		src += '\tthis._incoming.push('+(node.incoming.array ? 'cb' : 'first(cb)')+');\n';
+		src += '\tthis._writeLine('+args+');\n';
+	} else {
+		src += '\tthis._writeLine('+args+');\n';
+		src += '\tif (cb) this.flush(cb);\n';
+	}
 
 	return new Function('first', 'return '+src+'}')(first);
 };
