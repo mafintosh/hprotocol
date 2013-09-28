@@ -25,6 +25,29 @@ test('client.stream.pipe(client.stream)', function(t) {
 	client.stream.pipe(client.stream);
 });
 
+test('pipe + burst', function(t) {
+	var protocol = hprotocol()
+		.use('echo value > value');
+
+	var client = protocol();
+
+	client.on('echo', function(val, cb) {
+		cb(null, val);
+	});
+
+	client.stream.pipe(client.stream);
+
+	var expecting = 100;
+	var next = 0;
+
+	for (var i = 0; i < expecting; i++) {
+		client.echo(''+i, function(err, val) {
+			t.same(val, ''+next++);
+			if (next === expecting) t.end();
+		});
+	}
+});
+
 test('protocol(socket)', function(t) {
 	var protocol = hprotocol()
 		.use('echo val > val');
