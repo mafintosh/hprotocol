@@ -4,6 +4,8 @@ Streaming human readable command protocol
 
 	npm install hprotocol
 
+[![build status](https://secure.travis-ci.org/mafintosh/hprotocol.png)](http://travis-ci.org/mafintosh/hprotocol)
+
 ## What does it do?
 
 hprotocol allows you to easily generate a command protocol that its easy to
