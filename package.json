@@ -3,6 +3,18 @@
   "version": "0.1.1",
   "description": "Streaming human readable command protocol",
   "repository": "git://github.com/mafintosh/hprotocol.git",
+  "keywords": [
+  	"simple",
+  	"easy",
+  	"parser",
+  	"generator",
+  	"protocol",
+  	"stream",
+  	"streaming",
+  	"human",
+  	"readable",
+  	"nc"
+  ],
   "dependencies": {
     "fifo": "~0.2.0",
     "pump": "~0.1.5"
