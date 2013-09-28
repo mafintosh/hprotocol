@@ -159,6 +159,7 @@ var hprotocol = function() {
 				self._handleLine(line);
 			});
 			this.stream.on('close', function() {
+				while (self._incoming.length) self._shiftRequest(new Error('stream has closed'));
 				self.emit('close');
 			});
 
@@ -239,24 +240,3 @@ var hprotocol = function() {
 };
 
 module.exports = hprotocol;
-
-if (require.main !== module) return;
-
-var protocol = hprotocol()
-	.use('list key > values...')
-	.use('push key value')
-	.use('pull key value')
-	.use('count key > number')
-	.use('add numbers... > number')
-	.use('keys')
-	.use('clear');
-
-var p = protocol();
-
-p.stream.pipe(p.stream);
-
-p.on('list', function(key, cb) {
-	cb(null, ['hello', 'from', 'list', 'key', 'is', key]);
-});
-
-p.list('hello', console.log);
