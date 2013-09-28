@@ -50,8 +50,8 @@ var writegen = function(node) {
 
 	var src = 'function('+args.concat('cb').join(', ')+') {\n';
 
-	args = args.map(function(arg) {
-		return 'encodeURI('+arg+')';
+	args = args.map(function(arg, i) {
+		return node.outgoing[i].array ? arg+'.map(encodeURI)' : 'encodeURI('+arg+')';
 	});
 
 	args.unshift(JSON.stringify(node.name));
