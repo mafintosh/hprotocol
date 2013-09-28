@@ -3,6 +3,7 @@ var util = require('util');
 var EE = require('events').EventEmitter;
 var Duplex = require('stream').Duplex;
 var StringDecoder = require('string_decoder').StringDecoder;
+var pump = require('pump');
 
 var noop = function() {};
 
@@ -13,7 +14,7 @@ var hasArray = function(list) {
 };
 
 var parse = function(def) {
-	def = def.toString().trim().split(/\s+/);
+	def = def.toString().trim().replace(/^#+/, '').trim().split(/\s+/);
 	var result = {};
 	result.name = def.shift();
 
@@ -105,13 +106,21 @@ var LineStream = function() {
 	Duplex.call(this);
 	this._decoder = new StringDecoder();
 	this._buffer = '';
+	this._destroyed = false;
 };
 
 util.inherits(LineStream, Duplex);
 
 LineStream.prototype.line = function(line) {
-	// TODO: if ended do nothing
+	if (this._destroyed) return;
 	this.push(line+'\n');
+};
+
+LineStream.prototype.destroy = function() {
+	if (this._destroyed) return;
+	this._destroyed = true;
+	this.push(null);
+	this.emit('close');
 };
 
 LineStream.prototype._read = noop;
@@ -131,24 +140,29 @@ LineStream.prototype._write = function(data, enc, callback) {
 	callback();
 };
 
-var protocolify = function() {
+var hprotocol = function() {
 	var methods = {};
 	var events = {};
 	var Proto;
 
-	var fn = function() {
-		if (Proto) return new Proto();
+	var fn = function(stream) {
+		if (Proto) return new Proto(stream);
 
-		Proto = function() {
+		Proto = function(stream) {
+			var self = this;
+
 			this.stream = new LineStream();
-
 			this._incoming = fifo();
 			this._outgoing = fifo();
 
-			var self = this;
 			this.stream.on('line', function(line) {
 				self._handleLine(line);
 			});
+			this.stream.on('close', function() {
+				self.emit('close');
+			});
+
+			if (stream) pump(stream, this.stream, stream);
 		};
 
 		util.inherits(Proto, EE);
@@ -211,7 +225,7 @@ var protocolify = function() {
 			Proto.prototype[m] = methods[m];
 		});
 
-		return new Proto();
+		return new Proto(stream);
 	};
 
 	fn.use = function(def) {
@@ -224,11 +238,11 @@ var protocolify = function() {
 	return fn;
 };
 
-module.exports = protocolify;
+module.exports = hprotocol;
 
 if (require.main !== module) return;
 
-var protocol = protocolify()
+var protocol = hprotocol()
 	.use('list key > values...')
 	.use('push key value')
 	.use('pull key value')
