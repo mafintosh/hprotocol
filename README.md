@@ -109,6 +109,11 @@ client.on('reverse', function(values, callback) {
 socket.pipe(client.stream).pipe(socket);
 ```
 
+If the above socket was listening on port 9999 we could do
+
+	echo 'add 1 2 3 4' | nc localhost 9999
+	# prints > 10
+
 ## License
 
 MIT
