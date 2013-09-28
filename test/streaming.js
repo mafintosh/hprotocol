@@ -37,15 +37,17 @@ test('pipe + burst', function(t) {
 
 	client.stream.pipe(client.stream);
 
-	var expecting = 100;
-	var next = 0;
+	process.nextTick(function() {
+		var expecting = 10;
+		var next = 0;
 
-	for (var i = 0; i < expecting; i++) {
-		client.echo(''+i, function(err, val) {
-			t.same(val, ''+next++);
-			if (next === expecting) t.end();
-		});
-	}
+		for (var i = 0; i < expecting; i++) {
+			client.echo(''+i, function(err, val) {
+				t.same(val, ''+next++);
+				if (next === expecting) t.end();
+			});
+		}
+	});
 });
 
 test('protocol(socket)', function(t) {
