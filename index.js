@@ -147,7 +147,6 @@ LineStream.prototype._write = function(data, enc, callback) {
 var hprotocol = function() {
 	var methods = {};
 	var events = {};
-	var spec = [];
 	var Proto;
 
 	var fn = function(stream) {
@@ -175,7 +174,7 @@ var hprotocol = function() {
 
 		// protocol methods
 
-		Proto.prototype.specification = spec.join('');
+		Proto.prototype.specification = fn.specification;
 
 		Proto.prototype.flush = function(cb) {
 			this._incoming.push(first(cb));
@@ -236,9 +235,11 @@ var hprotocol = function() {
 		return new Proto(stream);
 	};
 
+	fn.specification = '';
+
 	fn.use = function(def) {
 		def = parse(def);
-		spec.push(def.specification);
+		fn.specification += def.specification;
 		methods[def.name] = writegen(def);
 		events[def.name] = switchgen(def);
 		return fn;
