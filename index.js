@@ -16,6 +16,7 @@ var hasArray = function(list) {
 var parse = function(def) {
 	def = def.toString().trim().replace(/^#+/, '').trim().split(/\s+/);
 	var result = {};
+	result.specification = '# '+def.join(' ')+'\n';
 	result.name = def.shift();
 
 	var map = function(val, i) {
@@ -146,6 +147,7 @@ LineStream.prototype._write = function(data, enc, callback) {
 var hprotocol = function() {
 	var methods = {};
 	var events = {};
+	var spec = [];
 	var Proto;
 
 	var fn = function(stream) {
@@ -172,6 +174,8 @@ var hprotocol = function() {
 		util.inherits(Proto, EE);
 
 		// protocol methods
+
+		Proto.prototype.specification = spec.join('');
 
 		Proto.prototype.flush = function(cb) {
 			this._writeLine(['flush']);
@@ -234,6 +238,7 @@ var hprotocol = function() {
 
 	fn.use = function(def) {
 		def = parse(def);
+		spec.push(def.specification);
 		methods[def.name] = writegen(def);
 		events[def.name] = switchgen(def);
 		return fn;
