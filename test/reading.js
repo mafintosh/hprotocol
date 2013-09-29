@@ -15,6 +15,38 @@ test('hello in one buffer', function(t) {
 	client.stream.write('hello\n');
 });
 
+test('hello in one buffer', function(t) {
+	var protocol = hprotocol()
+		.use('hello');
+
+	var client = protocol();
+
+	client.on('hello', function() {
+		t.ok(true);
+		t.end();
+	});
+
+	client.stream.write('hello\n');
+});
+
+test('hello + hello in one buffer', function(t) {
+	var protocol = hprotocol()
+		.use('hello');
+
+	var client = protocol();
+	var hellos = 0;
+
+	client.on('hello', function() {
+		hellos++;
+		if (hellos < 2) return;
+		t.same(hellos, 2);
+		t.end();
+	});
+
+	client.stream.write('hello\n');
+	client.stream.write('hello\n');
+});
+
 test('hello in fragments', function(t) {
 	var protocol = hprotocol()
 		.use('hello');
