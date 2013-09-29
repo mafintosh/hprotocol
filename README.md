@@ -30,6 +30,9 @@ net.createServer(function(socket) {
 
 	// setup the pipe chain
 	socket.pipe(client.stream).pipe(socket);
+
+	// print the protocol specification for easier usage
+	socket.write(client.specification);
 }).listen(9999);
 ```
 
