@@ -144,7 +144,7 @@ LineStream.prototype._write = function(data, enc, callback) {
 	callback();
 };
 
-var hprotocol = function() {
+var hprotocol = function(spec) {
 	var methods = {};
 	var events = {};
 	var Proto;
@@ -244,6 +244,8 @@ var hprotocol = function() {
 		events[def.name] = switchgen(def);
 		return fn;
 	};
+
+	if (spec) spec.toString().trim().split('\n').forEach(fn.use);
 
 	return fn;
 };
