@@ -135,7 +135,7 @@ LineStream.prototype._write = function(data, enc, callback) {
 	var offset = -1;
 
 	while ((offset = chunk.indexOf('\n', end)) > -1) {
-		this.emit('line',chunk.substring(0, offset).trim());
+		this.emit('line', chunk.substring(end, offset).trim());
 		end = offset+1;
 	}
 
@@ -178,8 +178,8 @@ var hprotocol = function() {
 		Proto.prototype.specification = spec.join('');
 
 		Proto.prototype.flush = function(cb) {
-			this._writeLine(['flush']);
 			this._incoming.push(first(cb));
+			this._writeLine(['flush']);
 		};
 
 		Proto.prototype._writeLine = function(line) {
@@ -187,7 +187,7 @@ var hprotocol = function() {
 		};
 
 		Proto.prototype._handleLine = function(line) {
-			if (line[0] === '#') return; // is a comment
+			if (!line && line[0] === '#') return; // is a comment
 			line = line.split(/\s+/);
 
 			switch (line[0]) { // baked in stuff
