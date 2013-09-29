@@ -1,6 +1,6 @@
 {
   "name": "hprotocol",
-  "version": "0.1.5",
+  "version": "0.2.0",
   "description": "Streaming human readable command protocol",
   "repository": "git://github.com/mafintosh/hprotocol.git",
   "keywords": [
