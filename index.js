@@ -14,14 +14,17 @@ var hasArray = function(list) {
 };
 
 var parse = function(def) {
-	def = def.toString().trim().replace(/^#+/, '').trim().split(/\s+/);
+	def = def.toString().trim().replace(/^\$+/, '').trim().split(/\s+/);
 	var result = {};
-	result.specification = '# '+def.join(' ')+'\n';
-	result.name = def.shift();
+	result.specification = '$ '+def.join(' ')+'\n';
+	result.fullname = def.shift();
+	var ns = result.fullname.split('.');
+	result.name = ns.pop();
+	result.ns = ns;
 
 	var map = function(val, i) {
 		return {
-			index: i+1,
+			offset: i+1,
 			array: /\.\.\.$/.test(val),
 			name: val.replace(/\.\.\.$/, '')
 		};
@@ -49,13 +52,13 @@ var writegen = function(node) {
 		return arg.name;
 	});
 
-	var src = 'function('+args.concat('cb').join(', ')+') {\n';
+	var src = 'function '+node.name+'('+args.concat('cb').join(', ')+') {\n';
 
 	args = args.map(function(arg, i) {
 		return node.outgoing[i].array ? arg+'.map(encodeURI)' : 'encodeURI('+arg+')';
 	});
 
-	args.unshift(JSON.stringify(node.name));
+	args.unshift(JSON.stringify(node.fullname));
 
 	if (hasArray(node.outgoing)) {
 		var arr = args.pop();
@@ -65,77 +68,109 @@ var writegen = function(node) {
 	}
 
 	if (node.incoming) {
-		src += '\tthis._incoming.push('+(node.incoming.array ? 'cb' : 'first(cb)')+');\n';
-		src += '\tthis._writeLine('+args+');\n';
+		src += '\tthis._p._incoming.push('+(node.incoming.array ? 'cb' : 'first(cb)')+');\n';
+		src += '\tthis._p.stream.command('+args+');\n';
 	} else {
-		src += '\tthis._writeLine('+args+');\n';
-		src += '\tif (cb) this.flush(cb);\n';
+		src += '\tthis._p.stream.command('+args+');\n';
+		src += '\tif (cb) this._p.ping(cb);\n';
 	}
 
 	return new Function('first', 'return '+src+'}')(first);
 };
 
-var switchgen = function(node) {
+var casegen = function(node) {
 	var args = node.outgoing.map(function(arg) {
-		return arg.array ? 'line.slice('+arg.index+').map(decodeURI)' : 'decodeURI(line['+arg.index+'])';
+		return arg.array ? 'line.slice('+arg.offset+').map(decodeURI)' : 'decodeURI(line['+arg.offset+'])';
 	});
 
-	if (node.incoming) args.push('this._pushResponse()');
+	if (node.incoming) args.push('pushResponse(self)');
 
-	var src = '\t\tcase '+JSON.stringify(node.name)+':\n';
+	var src = '\t\tcase '+JSON.stringify(node.fullname)+':\n';
 	var min = node.outgoing.length+1;
 
 	if (hasArray(node.outgoing)) min--;
 	if (min > 0) src += '\t\tif (line.length < '+min+') return;\n';
 
+	var ns = ['self'].concat(node.ns).join('.');
 	args.unshift(JSON.stringify(node.name));
-	src += '\t\tthis.emit('+args.join(', ')+');\n';
+	src += '\t\t'+ns+'.emit('+args.join(', ')+');\n';
 
 	return src+'\t\treturn;\n';
 };
 
-var emitgen = function(events) {
-	var src = '\tswitch (line[0]) {\n';
-
-	Object.keys(events).forEach(function(e) {
-		src += events[e];
+var switchgen = function(defs, shiftRequest, pushResponse) {
+	var src = '';
+	defs.forEach(function(def) {
+		src += casegen(def);
 	});
-
-	src += '\t}\n';
-
-	return new Function('return function(line) {\n'+src+'};')();
+	src = 'return function(self, line) {\n\tswitch (line[0]) {\n'+src+'\t}\n};';
+	return new Function('shiftRequest', 'pushResponse', src)(shiftRequest, pushResponse);
 };
 
-var LineStream = function() {
+var protogen = function(defs) {
+	var protos = {};
+
+	defs.forEach(function(def) {
+		var ns = def.ns.join('.') || '__default__';
+		if (!protos[ns]) {
+			protos[ns] = function(p) {
+				EE.call(this);
+				this._p = p;
+			};
+			util.inherits(protos[ns], EE);
+		}
+		protos[ns].prototype[def.name] = writegen(def);
+	});
+
+	return protos;
+};
+
+var nsgen = function(ns) {
+	var names = Object.keys(ns).sort();
+	var src = '';
+	var close = '';
+
+	names.forEach(function(name) {
+		src += '\tself.'+name+' = new ns.'+name+'(self);\n';
+	});
+	names.forEach(function(name) {
+		close += '\t\tself.'+name+'.emit("close");\n';
+	});
+
+	return new Function('ns', 'return function(self) {\n'+src+'\treturn function() {\n'+close+'\t};\n};')(ns);
+};
+
+var CommandStream = function() {
 	Duplex.call(this);
 	this._decoder = new StringDecoder();
 	this._buffer = '';
 	this._destroyed = false;
 };
 
-util.inherits(LineStream, Duplex);
+util.inherits(CommandStream, Duplex);
 
-LineStream.prototype.line = function(line) {
+CommandStream.prototype.command = function(line) {
 	if (this._destroyed) return;
-	this.push(line+'\n');
+	this.push(line.join(' ')+'\n');
 };
 
-LineStream.prototype.destroy = function() {
+CommandStream.prototype.destroy = function() {
 	if (this._destroyed) return;
 	this._destroyed = true;
 	this.push(null);
 	this.emit('close');
 };
 
-LineStream.prototype._read = noop;
+CommandStream.prototype._read = noop;
 
-LineStream.prototype._write = function(data, enc, callback) {
+CommandStream.prototype._write = function(data, enc, callback) {
 	var chunk = this._buffer + this._decoder.write(data);
 	var end = 0;
 	var offset = -1;
 
 	while ((offset = chunk.indexOf('\n', end)) > -1) {
-		this.emit('line', chunk.substring(end, offset).trim());
+		var line = chunk.substring(end, offset).trim();
+		if (line[0] !== '#' && line[0] !== '$') this.emit('command', line.split(/\s+/));
 		end = offset+1;
 	}
 
@@ -144,108 +179,94 @@ LineStream.prototype._write = function(data, enc, callback) {
 	callback();
 };
 
+var pushResponse = function(self) {
+	var node = self._outgoing.push(null);
+	return function(err, args) {
+		if (err) {
+			args = ['!', encodeURI(err.message)];
+		} else {
+			args = Array.isArray(args) ? args.map(encodeURI) : [encodeURI(args)];
+			args.unshift('>');
+		}
+		self._outgoing.set(node, args);
+		while (self._outgoing.first()) self.stream.command(self._outgoing.shift());
+	};
+};
+
+var shiftRequest = function(self, err, value) {
+	(self._incoming.shift() || noop)(err, value);
+};
+
 var hprotocol = function(spec) {
-	var methods = {};
-	var events = {};
-	var Proto;
+	var defs = [];
+	var Protocol;
 
 	var fn = function(stream) {
-		if (Proto) return new Proto(stream);
+		if (Protocol) return new Protocol(stream);
 
-		Proto = function(stream) {
-			var self = this;
+		var protos = protogen(defs);
+		var NS = protos.__default__;
+		delete protos.__default__;
 
-			this.stream = new LineStream();
+		var init = nsgen(protos);
+		var emit = switchgen(defs, shiftRequest, pushResponse);
+
+		Protocol = function(stream) {
+			NS.call(this, this);
+
+			this.stream = new CommandStream();
 			this._incoming = fifo();
 			this._outgoing = fifo();
 
-			this.stream.on('line', function(line) {
-				self._handleLine(line);
+			var uninit = init(this);
+			var self = this;
+
+			this.stream.on('command', function(line) {
+				switch (line[0]) { // baked in stuff
+					case '>':
+					return shiftRequest(self, null, line.slice(1).map(decodeURI));
+					case '!':
+					return shiftRequest(self, new Error(decodeURI(line[1])));
+					case 'ping':
+					return pushResponse(self)(null, 'pong');
+					default:
+					return emit(self, line);
+				}
 			});
+
 			this.stream.on('close', function() {
-				while (self._incoming.length) self._shiftRequest(new Error('stream has closed'));
+				while (self._incoming.length) shiftRequest(self, new Error('stream has closed'));
 				self.emit('close');
+				uninit();
 			});
 
 			if (stream) pump(stream, this.stream, stream);
 		};
 
-		util.inherits(Proto, EE);
+		util.inherits(Protocol, NS);
 
-		// protocol methods
-
-		Proto.prototype.specification = fn.specification;
-
-		Proto.prototype.flush = function(cb) {
-			this._incoming.push(first(cb));
-			this._writeLine(['flush']);
+		Protocol.prototype.ping = function(cb) {
+			this._incoming.push(cb);
+			this.stream.command(['ping']);
 		};
 
-		Proto.prototype._writeLine = function(line) {
-			this.stream.line(line.join(' '));
-		};
-
-		Proto.prototype._handleLine = function(line) {
-			if (!line && line[0] === '#') return; // is a comment
-			line = line.split(/\s+/);
-
-			switch (line[0]) { // baked in stuff
-				case '>':
-				this._shiftRequest(null, line.slice(1).map(decodeURI));
-				return;
-				case '!':
-				this._shiftRequest(new Error(decodeURI(line[1])));
-				return;
-				case 'flush':
-				this._pushResponse()(null, 'ok');
-				return;
-
-				default:
-				this._emitLine(line);
-				return;
-			}
-		};
-
-		Proto.prototype._emitLine = emitgen(events);
-
-		Proto.prototype._pushResponse = function() {
-			var self = this;
-			var node = this._outgoing.push(null);
-
-			return function(err, args) {
-				if (err) {
-					args = ['!', encodeURI(err.message)];
-				} else {
-					args = Array.isArray(args) ? args.map(encodeURI) : [encodeURI(args)];
-					args.unshift('>');
-				}
-				self._outgoing.set(node, args);
-				while (self._outgoing.first()) self._writeLine(self._outgoing.shift());
-			};
-		};
-
-		Proto.prototype._shiftRequest = function(err, value) {
-			(this._incoming.shift() || noop)(err, value);
-		};
-
-		Object.keys(methods).forEach(function(m) {
-			Proto.prototype[m] = methods[m];
-		});
-
-		return new Proto(stream);
+		return new Protocol(stream);
 	};
 
 	fn.specification = '';
 
 	fn.use = function(def) {
 		def = parse(def);
+		defs.push(def);
 		fn.specification += def.specification;
-		methods[def.name] = writegen(def);
-		events[def.name] = switchgen(def);
 		return fn;
 	};
 
-	if (spec) spec.toString().trim().split('\n').forEach(fn.use);
+	if (!spec) return fn;
+
+	spec.toString().trim().split('\n').forEach(function(line) {
+		if (line.trim()[0] === '$') fn.use(line.trim());
+	});
 
 	return fn;
 };
