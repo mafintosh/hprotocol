@@ -108,7 +108,7 @@ var switchgen = function(defs, context) {
 	defs.forEach(function(def) {
 		src += casegen(def);
 	});
-	src = 'function emit(self, line) {\n\tswitch (line[0]) {\n'+src+'\t}\n}';
+	src = 'function oncommand(self, line) {\n\tswitch (line[0]) {\n'+src+'\t}\n}';
 	return compile(src, context);
 };
 
@@ -221,7 +221,7 @@ var hprotocol = function(spec) {
 		delete protos.__default__;
 
 		var init = nsgen(protos);
-		var emit = switchgen(defs, {
+		var oncommand = switchgen(defs, {
 			shiftRequest:shiftRequest,
 			pushResponse:pushResponse
 		});
@@ -245,7 +245,7 @@ var hprotocol = function(spec) {
 					case 'ping':
 					return pushResponse(self)(null, 'pong');
 					default:
-					return emit(self, line);
+					return oncommand(self, line);
 				}
 			});
 
