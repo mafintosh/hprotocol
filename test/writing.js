@@ -34,7 +34,7 @@ test('hello + flush', function(t) {
 		.use('hello');
 
 	var client = protocol();
-	var messages = ['hello\n', 'flush\n'];
+	var messages = ['hello\n', 'ping\n'];
 
 	client.stream.on('data', function(data) {
 		t.same(data.toString(), messages.shift());
