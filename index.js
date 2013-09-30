@@ -213,8 +213,8 @@ var hprotocol = function(spec) {
 	var defs = [];
 	var Protocol;
 
-	var fn = function(stream) {
-		if (Protocol) return new Protocol(stream);
+	var fn = function(input, output) {
+		if (Protocol) return new Protocol(input, output);
 
 		var protos = protogen(defs);
 		var NS = protos.__default__;
@@ -226,7 +226,7 @@ var hprotocol = function(spec) {
 			pushResponse:pushResponse
 		});
 
-		Protocol = function(stream) {
+		Protocol = function(input, output) {
 			NS.call(this);
 
 			this.stream = new CommandStream();
@@ -255,7 +255,7 @@ var hprotocol = function(spec) {
 				uninit();
 			});
 
-			if (stream) pump(stream, this.stream, stream);
+			if (input) pump(input, this.stream, output || input);
 		};
 
 		util.inherits(Protocol, NS);
@@ -265,7 +265,7 @@ var hprotocol = function(spec) {
 			this.stream.command(['ping']);
 		};
 
-		return new Protocol(stream);
+		return new Protocol(input, output);
 	};
 
 	fn.specification = '';
