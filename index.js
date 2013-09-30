@@ -1,5 +1,6 @@
 var fifo = require('fifo');
 var util = require('util');
+var vm = require('vm');
 var EE = require('events').EventEmitter;
 var Duplex = require('stream').Duplex;
 var StringDecoder = require('string_decoder').StringDecoder;
@@ -47,6 +48,10 @@ var first = function(cb) {
 	};
 };
 
+var compile = function(src, context) {
+	return vm.runInNewContext('('+src+')', context);;
+};
+
 var writegen = function(node) {
 	var args = node.outgoing.map(function(arg) {
 		return arg.name;
@@ -75,7 +80,7 @@ var writegen = function(node) {
 		src += '\tif (cb) this._p.ping(cb);\n';
 	}
 
-	return new Function('first', 'return '+src+'}')(first);
+	return compile(src+'}', {first:first});
 };
 
 var casegen = function(node) {
@@ -98,17 +103,24 @@ var casegen = function(node) {
 	return src+'\t\treturn;\n';
 };
 
-var switchgen = function(defs, shiftRequest, pushResponse) {
+var switchgen = function(defs, context) {
 	var src = '';
 	defs.forEach(function(def) {
 		src += casegen(def);
 	});
-	src = 'return function(self, line) {\n\tswitch (line[0]) {\n'+src+'\t}\n};';
-	return new Function('shiftRequest', 'pushResponse', src)(shiftRequest, pushResponse);
+	src = 'function emit(self, line) {\n\tswitch (line[0]) {\n'+src+'\t}\n}';
+	return compile(src, context);
 };
 
 var protogen = function(defs) {
 	var protos = {};
+	var NS = function() {
+		EE.call(this);
+		this._p = this;
+	};
+
+	util.inherits(NS, EE);
+	protos.__default__ = NS;
 
 	defs.forEach(function(def) {
 		var ns = def.ns.join('.') || '__default__';
@@ -137,7 +149,7 @@ var nsgen = function(ns) {
 		close += '\t\tself.'+name+'.emit("close");\n';
 	});
 
-	return new Function('ns', 'return function(self) {\n'+src+'\treturn function() {\n'+close+'\t};\n};')(ns);
+	return compile('function init(self) {\n'+src+'\treturn function() {\n'+close+'\t};\n}', {ns:ns});
 };
 
 var CommandStream = function() {
@@ -209,10 +221,13 @@ var hprotocol = function(spec) {
 		delete protos.__default__;
 
 		var init = nsgen(protos);
-		var emit = switchgen(defs, shiftRequest, pushResponse);
+		var emit = switchgen(defs, {
+			shiftRequest:shiftRequest,
+			pushResponse:pushResponse
+		});
 
 		Protocol = function(stream) {
-			NS.call(this, this);
+			NS.call(this);
 
 			this.stream = new CommandStream();
 			this._incoming = fifo();
