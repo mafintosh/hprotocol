@@ -140,16 +140,12 @@ var protogen = function(defs) {
 var nsgen = function(ns) {
 	var names = Object.keys(ns).sort();
 	var src = '';
-	var close = '';
 
 	names.forEach(function(name) {
 		src += '\tself.'+name+' = new ns.'+name+'(self);\n';
 	});
-	names.forEach(function(name) {
-		close += '\t\tself.'+name+'.emit("close");\n';
-	});
 
-	return compile('function init(self) {\n'+src+'\treturn function() {\n'+close+'\t};\n}', {ns:ns});
+	return compile('function init(self) {\n'+src+'}', {ns:ns});
 };
 
 var CommandStream = function() {
@@ -233,7 +229,7 @@ var hprotocol = function(spec) {
 			this._incoming = fifo();
 			this._outgoing = fifo();
 
-			var uninit = init(this);
+			init(this);
 			var self = this;
 
 			this.stream.on('command', function(line) {
@@ -252,7 +248,6 @@ var hprotocol = function(spec) {
 			this.stream.on('close', function() {
 				while (self._incoming.length) shiftRequest(self, new Error('stream has closed'));
 				self.emit('close');
-				uninit();
 			});
 
 			if (input) pump(input, this.stream, output || input);
@@ -263,6 +258,10 @@ var hprotocol = function(spec) {
 		Protocol.prototype.ping = function(cb) {
 			this._incoming.push(cb);
 			this.stream.command(['ping']);
+		};
+
+		Protocol.prototype.destroy = function() {
+			this.stream.destroy();
 		};
 
 		return new Protocol(input, output);
