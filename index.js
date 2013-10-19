@@ -6,8 +6,20 @@ var StringDecoder = require('string_decoder').StringDecoder;
 
 var noop = function() {};
 
-var HumanParser = function() {
-	if (!(this instanceof HumanParser)) return new HumanParser();
+var encode = function(arr) {
+	return arr.map(encodeURIComponent);
+};
+
+var decode = function(arr) {
+	return arr.map(decodeURIComponent);
+};
+
+var echo = function(arr) {
+	return arr;
+};
+
+var HumanParser = function(opts) {
+	if (!(this instanceof HumanParser)) return new HumanParser(opts);
 
 	stream.Duplex.call(this);
 
@@ -16,6 +28,14 @@ var HumanParser = function() {
 
 	this.ended = false;
 	this.closed = false;
+
+	if (opts && opts.encode === false) {
+		this.encode = echo;
+		this.decode = echo;
+	} else {
+		this.encode = encode;
+		this.decode = decode;
+	}
 
 	this.buffer = '';
 	this.decoder = new StringDecoder('utf-8');
@@ -36,7 +56,7 @@ HumanParser.prototype._write = function(data, enc, callback) {
 		this.buffer = '';
 		prev = cur+1;
 		msg = msg ? msg.split(/\s+/) : [];
-		this._onmessage(msg.shift(), msg.map(decodeURIComponent));
+		this._onmessage(msg.shift(), this.decode(msg));
 	}
 
 	this.buffer += data.slice(prev);
@@ -57,7 +77,7 @@ HumanParser.prototype._onmessage = function(cmd, msg) {
 			self.incoming.set(node, '! '+err.message+'\n');
 		} else {
 			if (!Array.isArray(result)) result = [result];
-			self.incoming.set(node, '> '+result.map(encodeURIComponent).join(' ')+'\n');
+			self.incoming.set(node, '> '+self.encode(result).join(' ')+'\n');
 		}
 		while (self.incoming.first()) self._push(self.incoming.shift());
 	};
@@ -74,7 +94,7 @@ HumanParser.prototype.send = function(cmd, args, cb) {
 	if (typeof args === 'function') return this.send(cmd, [], args);
 	if (args === undefined) args = [];
 	if (!Array.isArray(args)) args = [args];
-	args = args.length ? ' '+args.map(encodeURIComponent).join(' ') : '';
+	args = args.length ? ' '+this.encode(args).join(' ') : '';
 	if (!cb) return this._push('~'+cmd+args+'\n');
 	this.outgoing.push(cb);
 	this._push(cmd+args+'\n');
