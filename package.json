@@ -17,7 +17,6 @@
   ],
   "dependencies": {
     "fifo": "~0.2.0",
-    "pump": "~0.1.5"
   },
   "devDependencies": {
     "tap": "~0.4.4"
