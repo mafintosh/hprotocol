@@ -2,81 +2,76 @@ var test = require('tap').test;
 var net = require('net');
 var hprotocol = require('../index');
 
-test('client.stream.pipe(client.stream)', function(t) {
-	var protocol = hprotocol()
-		.use('echo value > value');
+test('protocol.pipe(protocol)', function(t) {
+	var protocol = hprotocol();
 
-	var client = protocol();
-
-	client.on('echo', function(val, cb) {
-		if (val === 'fail') return cb(new Error('fail'));
-		cb(null, 'echo: '+val);
+	protocol.on('message', function(cmd, args, cb) {
+		if (cmd === 'fail') return cb(new Error('fail'));
+		cb(null, 'echo: '+args[0]);
 	});
 
-	client.echo('a', function(err, val) {
-		t.same(val, 'echo: a');
-		client.echo('fail', function(err) {
+	protocol.send('echo', 'a', function(err, val) {
+		t.same(val[0], 'echo: a');
+		protocol.send('fail', function(err) {
 			t.ok(!!err);
 			t.same(err.message, 'fail');
 			t.end();
 		});
 	});
 
-	client.stream.pipe(client.stream);
+	protocol.pipe(protocol);
 });
 
 test('pipe + burst', function(t) {
-	var protocol = hprotocol()
-		.use('echo value > value');
+	var protocol = hprotocol();
 
-	var client = protocol();
-
-	client.on('echo', function(val, cb) {
-		cb(null, val);
+	protocol.on('message', function(cmd, args, cb) {
+		cb(null, args);
 	});
 
-	client.stream.pipe(client.stream);
+	protocol.pipe(protocol);
 
 	process.nextTick(function() {
 		var expecting = 10;
 		var next = 0;
 
 		for (var i = 0; i < expecting; i++) {
-			client.echo(''+i, function(err, val) {
-				t.same(val, ''+next++);
+			protocol.send('echo', ''+i, function(err, val) {
+				t.same(val[0], ''+next++);
 				if (next === expecting) t.end();
 			});
 		}
 	});
 });
 
-test('protocol(socket)', function(t) {
-	var protocol = hprotocol()
-		.use('echo val > val');
+test('net.connect() + protocol', function(t) {
 
 	var server = net.createServer(function(socket) {
-		var client = protocol(socket);
-		client.on('echo', function(val, cb) {
-			client.echo('server: '+val, cb);
+		var protocol = hprotocol();
+		protocol.on('message', function(cmd, args, cb) {
+			protocol.send(cmd, ['server'].concat(args), cb);
 		});
+		protocol.pipe(socket).pipe(protocol);
 	});
 
 	server.listen(9876, function() {
 		var socket = net.connect(9876);
-		var client = protocol(socket);
+		var protocol = hprotocol();
 
 		t.plan(2);
-		client.on('echo', function(val, cb) {
-			cb(null, 'client: '+val);
+		protocol.on('message', function(cmd, args, cb) {
+			if (cmd === 'echo') return cb(null, ['client'].concat(args));
+			cb(new Error('unknown command'));
 		});
-		client.echo('a', function(err, val) {
+		protocol.send('echo', 'a', function(err, val) {
 			t.ok(!err);
-			t.same(val, 'client: server: a');
+			t.same(val, ['client', 'server', 'a']);
 			socket.destroy();
 			server.close();
 		});
-		client.on('close', function() {
+		protocol.on('close', function() {
 			t.end();
 		});
+		protocol.pipe(socket).pipe(protocol);
 	});
 });
