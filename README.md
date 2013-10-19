@@ -16,10 +16,10 @@ var hprotocol = require('hprotocol');
 var net = require('net');
 
 net.createServer(function(socket) {
-	var protocol = hprotocol()
+	var protocol = hprotocol();
 
-	// listen for the echo command
 	client.on('message', function(cmd, args, callback) {
+		// listen for the echo command
 		if (cmd === 'echo') return callback(null, args);
 		callback(new Error('unknown command'));
 	});
