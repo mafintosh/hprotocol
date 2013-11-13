@@ -76,6 +76,7 @@ HumanParser.prototype._onmessage = function(cmd, msg) {
 		if (err) {
 			self.incoming.set(node, '! '+err.message+'\n');
 		} else {
+			if (result === undefined) result = [];
 			if (!Array.isArray(result)) result = [result];
 			self.incoming.set(node, '> '+self.encode(result).join(' ')+'\n');
 		}
