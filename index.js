@@ -39,6 +39,15 @@ var HumanParser = function(opts) {
 
 	this.buffer = '';
 	this.decoder = new StringDecoder('utf-8');
+
+	this.on('finish', function() {
+		this._push(null);
+		this.destroy();
+	});
+
+	this.on('close', function() {
+		while (this.outgoing.length) (this.outgoing.shift() || noop)(new Error('protocol has closed'));
+	});
 };
 
 util.inherits(HumanParser, stream.Duplex);
@@ -88,6 +97,7 @@ HumanParser.prototype._onmessage = function(cmd, msg) {
 
 HumanParser.prototype._push = function(data) {
 	if (this.ended) return;
+	this.ended = data === null;
 	this.push(data);
 };
 
@@ -99,12 +109,6 @@ HumanParser.prototype.send = function(cmd, args, cb) {
 	if (!cb) return this._push('~'+cmd+args+'\n');
 	this.outgoing.push(cb);
 	this._push(cmd+args+'\n');
-};
-
-HumanParser.prototype.end = function() {
-	if (this.ended) return;
-	this.ended = true;
-	this._push(null);
 };
 
 HumanParser.prototype.destroy = function() {
