@@ -73,6 +73,7 @@ HumanParser.prototype._write = function(data, enc, callback) {
 };
 
 HumanParser.prototype._onmessage = function(cmd, msg) {
+	if (!cmd) return;
 	if (cmd[0] === '~') return this.emit('message', cmd.slice(1), msg, noop);
 
 	if (cmd === '!') return (this.outgoing.shift() || noop)(new Error(msg.join(' ')));
