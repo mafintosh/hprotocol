@@ -8,27 +8,35 @@ Streaming human readable command protocol
 
 ## What does it do?
 
-hprotocol is a redis like protocol that its easy to parse both for programs and human beings.
-As an example lets echo a value
+hprotocol allows you to easily generate a command protocol that its easy to
+parse both for programs and human beings.
+
+As an example lets generate a protocol that echoes a value
 
 ``` js
 var hprotocol = require('hprotocol');
 var net = require('net');
 
-net.createServer(function(socket) {
-	var protocol = hprotocol();
+var protocol = hprotocol()
+	.use('echo value > value');
 
-	client.on('message', function(cmd, args, callback) {
-		// listen for the echo command
-		if (cmd === 'echo') return callback(null, args);
-		callback(new Error('unknown command'));
+net.createServer(function(socket) {
+	var client = protocol();
+
+	// listen for the echo command
+	client.on('echo', function(value, callback) {
+		callback(null, 'echo: '+value);
 	});
 
 	// setup the pipe chain
-	socket.pipe(protocol).pipe(socket);
+	socket.pipe(client.stream).pipe(socket);
+
+	// print the protocol specification for easier usage
+	socket.write(client.specification);
 }).listen(9999);
 ```
 
+The `echo value > value` syntax denotes an `echo` command that accepts a value and returns a value.
 Open a new termainal and try interfacing with the server.
 
 	$ nc localhost 9999 # create a socket to the server
@@ -38,38 +46,78 @@ Open a new termainal and try interfacing with the server.
 Similary you can interface with the server using node:
 
 ``` js
-var protocol = hprotocol(); // using the same protocol as above
+var client = protocol(); // using the same protocol as above
 var socket = net.connect(9999, 'localhost');
 
-socket.pipe(protocol).pipe(socket);
+socket.pipe(client.stream).pipe(socket);
 
-protocol.send('echo', ['test'], function(err, value) {
-	console.log(value); // prints ['test']
+client.echo('test', function(err, value) {
+	console.log(value); // prints echo: test
 });
 ```
 
-## Protocol syntax
+Optionally you can use pass the stream to protocol to setup the pipe chain for you
 
-All messages are seperated by newlines and arguments are seperated by whitespace.
+``` js
+var socket = net.connect(9999, 'localhost');
+var client = protocol(socket);
 
-```
-command arg1 arg2 ...
-```
-
-A response starts with `>` and error responses start with `!`
-
-```
-echo a b c
-> a b c
-bad
-! unknown command
+client.echo(...);
 ```
 
-If you do care about the response send ~ before the command
+## Command syntax
 
+Similary to the above example the command syntax is always
+
+	command argument1 argument2 ... > response
+
+If the command does not have a response just do
+
+	command argument1 arguments2
+
+If a series of arguments should the passed as an array add `...` to the syntax
+
+	command test args... > response
+
+Similary if your response is an array
+
+	command test args... > response...
+
+Some examples of this could be
+
+``` js
+var protocol = hprotocol()
+	.use('hello')
+	.use('add numbers... > number')
+	.use('reverse values... > values...')
+
+var client = protocol();
+
+client.on('hello', function() {
+	// no response for this since no > in the spec
+	console.log('hello world');
+});
+
+client.on('add', function(numbers, callback) {
+	numbers = numbers.map(Number); // convert to numbers
+	var sum = numbers.reduce(function(a, b) {
+		return a+b;
+	}, 0);
+	callback(null, sum); // return a single value
+});
+
+client.on('reverse', function(values, callback) {
+	callback(null, values.reverse());
+});
+
+// setup a pipe chain
+socket.pipe(client.stream).pipe(socket);
 ```
-~echo a b c
-```
+
+If the above socket was listening on port 9999 we could do
+
+	echo 'add 1 2 3 4' | nc localhost 9999
+	# prints > 10
 
 ## License
 
